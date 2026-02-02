@@ -1,0 +1,195 @@
+//@version=5
+indicator("XAU/USD Trend Reversal Candles", shorttitle="Gold Reversals", overlay=true)
+
+// ═══════════════════════════════════════════════════════════
+// INPUT PARAMETERS
+// ═══════════════════════════════════════════════════════════
+
+engulfingEnabled = input.bool(true, "Show Engulfing Patterns", group="Pattern Selection")
+hammerEnabled = input.bool(true, "Show Hammer/Shooting Star", group="Pattern Selection")
+dojiEnabled = input.bool(true, "Show Doji/Morning Star", group="Pattern Selection")
+
+// Sensitivity Settings
+bodyMinPct = input.float(0.3, "Min Body % for Engulfing", minval=0.1, maxval=1.0, step=0.1, group="Sensitivity")
+wickRatio = input.float(2.0, "Wick to Body Ratio (Hammer)", minval=1.5, maxval=4.0, step=0.5, group="Sensitivity")
+dojiBodyPct = input.float(0.1, "Max Body % for Doji", minval=0.05, maxval=0.2, step=0.05, group="Sensitivity")
+
+// Visual Settings
+bullishColor = input.color(color.new(color.green, 0), "Bullish Signal Color", group="Visual")
+bearishColor = input.color(color.new(color.red, 0), "Bearish Signal Color", group="Visual")
+labelSize = input.string("small", "Label Size", options=["tiny", "small", "normal", "large"], group="Visual")
+showLabels = input.bool(true, "Show Pattern Labels", group="Visual")
+
+// ═══════════════════════════════════════════════════════════
+// CANDLE CALCULATIONS
+// ═══════════════════════════════════════════════════════════
+
+// Current candle metrics
+bodySize = math.abs(close - open)
+candleRange = high - low
+upperWick = high - math.max(close, open)
+lowerWick = math.min(close, open) - low
+isBullish = close > open
+isBearish = close < open
+
+// Previous candle metrics
+prevBodySize = math.abs(close[1] - open[1])
+prevIsBullish = close[1] > open[1]
+prevIsBearish = close[1] < open[1]
+
+// ═══════════════════════════════════════════════════════════
+// PATTERN DETECTION FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+
+// BULLISH ENGULFING
+bullishEngulfing = engulfingEnabled and 
+     prevIsBearish and 
+     isBullish and 
+     open <= close[1] and 
+     close >= open[1] and 
+     bodySize > prevBodySize * bodyMinPct
+
+// BEARISH ENGULFING
+bearishEngulfing = engulfingEnabled and 
+     prevIsBullish and 
+     isBearish and 
+     open >= close[1] and 
+     close <= open[1] and 
+     bodySize > prevBodySize * bodyMinPct
+
+// HAMMER (Bullish Reversal)
+// Long lower wick, small body at top, minimal upper wick
+hammer = hammerEnabled and 
+     isBullish and 
+     lowerWick > bodySize * wickRatio and 
+     upperWick < bodySize * 0.3 and 
+     bodySize > candleRange * 0.15
+
+// SHOOTING STAR (Bearish Reversal)
+// Long upper wick, small body at bottom, minimal lower wick
+shootingStar = hammerEnabled and 
+     isBearish and 
+     upperWick > bodySize * wickRatio and 
+     lowerWick < bodySize * 0.3 and 
+     bodySize > candleRange * 0.15
+
+// DOJI
+// Very small body relative to range
+doji = dojiEnabled and 
+     bodySize <= candleRange * dojiBodyPct and 
+     candleRange > 0
+
+// MORNING STAR (3-candle bullish reversal)
+// 1st: Bearish, 2nd: Small body (doji/spinning top), 3rd: Bullish
+morningStar = dojiEnabled and 
+     prevIsBearish[1] and 
+     math.abs(close[1] - open[1]) < (high[1] - low[1]) * 0.3 and 
+     isBullish and 
+     close > (open[2] + close[2]) / 2
+
+// EVENING STAR (3-candle bearish reversal)
+eveningStar = dojiEnabled and 
+     prevIsBullish[1] and 
+     math.abs(close[1] - open[1]) < (high[1] - low[1]) * 0.3 and 
+     isBearish and 
+     close < (open[2] + close[2]) / 2
+
+// ═══════════════════════════════════════════════════════════
+// VISUAL PLOTTING
+// ═══════════════════════════════════════════════════════════
+
+// Get label size
+getLabelSize() =>
+    labelSize == "tiny" ? size.tiny : 
+     labelSize == "small" ? size.small : 
+     labelSize == "normal" ? size.normal : size.large
+
+// Plot Bullish Signals
+if bullishEngulfing and showLabels
+    label.new(bar_index, low, "BE", 
+         color=bullishColor, 
+         textcolor=color.white, 
+         style=label.style_label_up, 
+         size=getLabelSize(),
+         tooltip="Bullish Engulfing\nStrong reversal signal")
+
+if hammer and showLabels
+    label.new(bar_index, low, "H", 
+         color=bullishColor, 
+         textcolor=color.white, 
+         style=label.style_label_up, 
+         size=getLabelSize(),
+         tooltip="Hammer\nBullish reversal at support")
+
+if morningStar and showLabels
+    label.new(bar_index, low, "MS", 
+         color=bullishColor, 
+         textcolor=color.white, 
+         style=label.style_label_up, 
+         size=getLabelSize(),
+         tooltip="Morning Star\n3-candle bullish reversal")
+
+if doji and close > open and showLabels
+    label.new(bar_index, low, "D", 
+         color=color.new(bullishColor, 30), 
+         textcolor=color.white, 
+         style=label.style_label_up, 
+         size=getLabelSize(),
+         tooltip="Doji\nIndecision - potential reversal")
+
+// Plot Bearish Signals
+if bearishEngulfing and showLabels
+    label.new(bar_index, high, "BE", 
+         color=bearishColor, 
+         textcolor=color.white, 
+         style=label.style_label_down, 
+         size=getLabelSize(),
+         tooltip="Bearish Engulfing\nStrong reversal signal")
+
+if shootingStar and showLabels
+    label.new(bar_index, high, "SS", 
+         color=bearishColor, 
+         textcolor=color.white, 
+         style=label.style_label_down, 
+         size=getLabelSize(),
+         tooltip="Shooting Star\nBearish reversal at resistance")
+
+if eveningStar and showLabels
+    label.new(bar_index, high, "ES", 
+         color=bearishColor, 
+         textcolor=color.white, 
+         style=label.style_label_down, 
+         size=getLabelSize(),
+         tooltip="Evening Star\n3-candle bearish reversal")
+
+if doji and close < open and showLabels
+    label.new(bar_index, high, "D", 
+         color=color.new(bearishColor, 30), 
+         textcolor=color.white, 
+         style=label.style_label_down, 
+         size=getLabelSize(),
+         tooltip="Doji\nIndecision - potential reversal")
+
+// Background highlighting for strong signals
+bgcolor(bullishEngulfing ? color.new(bullishColor, 90) : na, title="Bullish Engulfing BG")
+bgcolor(bearishEngulfing ? color.new(bearishColor, 90) : na, title="Bearish Engulfing BG")
+bgcolor(morningStar ? color.new(bullishColor, 95) : na, title="Morning Star BG")
+bgcolor(eveningStar ? color.new(bearishColor, 95) : na, title="Evening Star BG")
+
+// Plot shapes for quick visual reference
+plotshape(bullishEngulfing, style=shape.triangleup, location=location.belowbar, 
+     color=bullishColor, size=size.small, title="Bullish Engulfing")
+plotshape(bearishEngulfing, style=shape.triangledown, location=location.abovebar, 
+     color=bearishColor, size=size.small, title="Bearish Engulfing")
+
+// ═══════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════
+
+alertcondition(bullishEngulfing, title="Bullish Engulfing", message="XAU/USD: Bullish Engulfing detected - Potential bottom")
+alertcondition(bearishEngulfing, title="Bearish Engulfing", message="XAU/USD: Bearish Engulfing detected - Potential top")
+alertcondition(hammer, title="Hammer", message="XAU/USD: Hammer pattern - Bullish reversal signal")
+alertcondition(shootingStar, title="Shooting Star", message="XAU/USD: Shooting Star - Bearish reversal signal")
+alertcondition(morningStar, title="Morning Star", message="XAU/USD: Morning Star pattern - Strong bullish reversal")
+alertcondition(eveningStar, title="Evening Star", message="XAU/USD: Evening Star pattern - Strong bearish reversal")
+alertcondition(doji, title="Doji", message="XAU/USD: Doji detected - Market indecision")
